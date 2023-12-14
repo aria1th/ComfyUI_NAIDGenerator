@@ -274,12 +274,13 @@ class GenerateNAID:
             print(f"dotenv not loaded: {e}")
         self.logged_username = None
         self.logged_password = None
+        self.access_token_fixed = None
         self.handle_login()
         self.output_dir = folder_paths.get_output_directory()
         self.run_started = None
+        self.initial_run_started= None
         self.total_created = 0
         self.total_all_created = 0
-        self.access_token_fixed = None
     
     def handle_login(self):
         """
@@ -408,6 +409,7 @@ class GenerateNAID:
             self.access_token_fixed = nai_token # override access token
         if self.run_started is None:
             self.run_started = datetime.now()
+            self.initial_run_started = datetime.now()
         if runtime_limit_min > 0:
             runtime = (datetime.now() - self.run_started).total_seconds()
             if runtime_limit_max <= runtime_limit_min:
@@ -430,9 +432,11 @@ class GenerateNAID:
                 self.run_started = datetime.now()
                 self.total_created = 0
                 runtime = 0
+            total_runtime = (datetime.now() - self.initial_run_started).total_seconds()
             print(f"Running for {runtime} seconds")
+            print(f"Total runtime {total_runtime} seconds")
             print(f"Created {self.total_created} images at {runtime / max(self.total_created,1)} seconds per image")
-            print(f"Created {self.total_all_created} images in total")
+            print(f"Created {self.total_all_created} images in total at {total_runtime / max(self.total_all_created,1)} seconds per image")
             # bugs statistics
             errors.get_statistics()
         params = {
@@ -498,16 +502,20 @@ class GenerateNAID:
                     errors.log_and_print(f"ConnectionError: {e}")
                 else:
                     errors.log_and_print(f"Error: {e}")
-                # check 500 Internal Server Error
-                if not isinstance(e, requests.exceptions.Timeout):
-                    # wait for 60 seconds
+                # check 500 Internal Server Error, 500 then sleep 5 seconds else sleep 60 seconds (or more)
+                if isinstance(e, requests.exceptions.HTTPError) and e.response.status_code == 500:
+                    print(f"retrying {retry_count} after 5 seconds...")
+                    time.sleep(5)
+                else:
+                    if not isinstance(e, requests.exceptions.Timeout):
+                        # wait for 60 seconds
+                        print(f"Error: {e}")
+                        print(f"retrying {retry_count} after 60 seconds...")
+                        time.sleep(60) # sleep for 60 seconds
+                    retry_count += 1
                     print(f"Error: {e}")
                     print(f"retrying {retry_count} after 60 seconds...")
                     time.sleep(60) # sleep for 60 seconds
-                retry_count += 1
-                print(f"Error: {e}")
-                print(f"retrying {retry_count} after 60 seconds...")
-                time.sleep(60) # sleep for 60 seconds
                 while True:
                     try:
                         self.handle_login() # refresh access token
