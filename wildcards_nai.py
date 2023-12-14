@@ -131,7 +131,7 @@ class wildcards:
         target_text=text
         for i in range(1, wildcards.loop_max):
             tmp=wildcards.recard.sub(wildcards.card, target_text)
-            print(f"card deck selected : {tmp}")
+            #print(f"card deck selected : {tmp}")
             if target_text==tmp :
                 # failed to find card
                 tmp=wildcards.sub_loop(tmp)
@@ -193,8 +193,12 @@ class wildcards:
         if not wildcards.is_card_Load or load:
             wildcards.card_load()
 
-        print(f"text : {text}")
+        #print(f"text : {text}")
         result=wildcards.card_loop(text)
+        # if __{}__ is still in text, raise error
+        if "__" in result:
+            print(f"result : {result}")
+            raise ValueError("Failed to find card")
         print(f"result : {result}")
         return result
 
@@ -218,7 +222,7 @@ class NAITextWildcards:
             "text": ("STRING", {"multiline": True, "dynamicPrompts": False}),
             "SD2NAI": (["none", "SD2NAI text style"], {"default":"SD2NAI text style"}),
             "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
-            
+            "refresh": ("INT", {"default": 0, "min": 0, "max": 1}), # 0: no refresh, 1: refresh
         }
         }
     RETURN_TYPES = ("STRING","ASCII")
@@ -226,10 +230,10 @@ class NAITextWildcards:
 
     CATEGORY = "NAI"
 
-    def encode(self, seed, text, SD2NAI):
+    def encode(self, seed, text, SD2NAI, refresh):
         random.seed(seed)
         # print(f"original text : ",text)
-        r=wildcards.run(text)
+        r=wildcards.run(text, load=refresh)
         # print(f"wildcard result : ",r)
         if SD2NAI == "SD2NAI text style":
             r=SD2NAIstyle(r)
