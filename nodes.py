@@ -279,11 +279,14 @@ class GenerateNAID:
         self.run_started = None
         self.total_created = 0
         self.total_all_created = 0
+        self.access_token_fixed = None
     
     def handle_login(self):
         """
         Logins and returns an access token
         """
+        if self.access_token_fixed is not None:
+            return self.access_token_fixed
         if "NAI_ACCESS_KEY" in env:
             access_key = env["NAI_ACCESS_KEY"]
         elif "NAI_USERNAME" in env and "NAI_PASSWORD" in env:
@@ -333,6 +336,7 @@ class GenerateNAID:
                             "sleep_min" : ("INT", { "default": 0, "min": 0, "max": 24000, "step": 1, "display": "number" }), # sleep time in seconds
                             "sleep_max" : ("INT", { "default": 0, "min": 0, "max": 24000, "step": 1, "display": "number" }), # sleep time in seconds
                             "save" : (["True", "False"], {"default": "False"}), # save image to comfy output dir
+                            "nai_token" : ("STRING", { "default": "", "multiline": False, "dynamicPrompts": False }), # override access token
                          },
         }
 
@@ -390,14 +394,18 @@ class GenerateNAID:
         return size, width, height, steps, option, positive, negative
 
     def generate(self, size, width, height, positive, negative, steps, cfg, smea, sampler, scheduler, seed, uncond_scale,
-                 cfg_rescale, delay_max, fallback_black, delay_min, option=None, username=None, password=None,runtime_limit_min=0, runtime_limit_max=0, sleep_min=0, sleep_max=0, save=False):
+                 cfg_rescale, delay_max, fallback_black, delay_min, option=None, username=None, password=None,runtime_limit_min=0, runtime_limit_max=0, sleep_min=0, sleep_max=0, save=False,
+                 nai_token=None):
         save = save == "True"
         # ref. novelai_api.ImagePreset
         # We override the default values here for non-custom sizes
         size, width, height, steps, option, positive, negative = self.sanitize_options(size, width, height, steps, option, positive, negative)
         assert cfg > 0, "cfg must be greater than 0"
-        self.username = username
-        self.password = password
+        if username and password:
+            self.username = username
+            self.password = password
+        if nai_token:
+            self.access_token_fixed = nai_token # override access token
         if self.run_started is None:
             self.run_started = datetime.now()
         if runtime_limit_min > 0:
