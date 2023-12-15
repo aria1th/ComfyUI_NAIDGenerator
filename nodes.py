@@ -1,3 +1,4 @@
+import os
 import random
 try:
     import dotenv
@@ -553,7 +554,7 @@ class GenerateNAID:
                 raise exception
         self.total_created += 1
         self.total_all_created += 1
-        output_folder = self.output_dir
+        output_folder = os.path.join(self.output_dir, subfolder_path) 
         if save:
             ## save original png to comfy output dir
             full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path("NAI_autosave", output_folder)
@@ -562,10 +563,7 @@ class GenerateNAID:
                 file = f"{filename}_{counter}_.png"
             else:
                 file = f"{filename}_{counter:05}_.png"
-            if subfolder_path:
-                d = Path(full_output_folder) / subfolder_path
-            else:
-                d = Path(full_output_folder)
+            d = Path(full_output_folder)
             d.mkdir(exist_ok=True)
             (d / file).write_bytes(image_bytes)
         biased_random = BiasedRandom(max(delay_min, 2.0), max(delay_max, 2.0), 0.02, 0.8).generate()
