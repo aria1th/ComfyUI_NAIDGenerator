@@ -338,6 +338,7 @@ class GenerateNAID:
                             "sleep_max" : ("INT", { "default": 0, "min": 0, "max": 24000, "step": 1, "display": "number" }), # sleep time in seconds
                             "save" : (["True", "False"], {"default": "False"}), # save image to comfy output dir
                             "nai_token" : ("STRING", { "default": "", "multiline": False, "dynamicPrompts": False }), # override access token
+                            "subfolder_path" : ("STRING", { "default": "", "multiline": False, "dynamicPrompts": False }), # override subfolder path for comfy output dir
                          },
         }
 
@@ -396,7 +397,7 @@ class GenerateNAID:
 
     def generate(self, size, width, height, positive, negative, steps, cfg, smea, sampler, scheduler, seed, uncond_scale,
                  cfg_rescale, delay_max, fallback_black, delay_min, option=None, username=None, password=None,runtime_limit_min=0, runtime_limit_max=0, sleep_min=0, sleep_max=0, save=False,
-                 nai_token=None):
+                 nai_token=None, subfolder_path=None):
         save = save == "True"
         # ref. novelai_api.ImagePreset
         # We override the default values here for non-custom sizes
@@ -408,6 +409,8 @@ class GenerateNAID:
         if nai_token:
             self.access_token_fixed = nai_token # override access token
             self.access_token = nai_token
+        else:
+            self.handle_login()
         if self.run_started is None:
             self.run_started = datetime.now()
             self.initial_run_started = datetime.now()
@@ -550,11 +553,19 @@ class GenerateNAID:
                 raise exception
         self.total_created += 1
         self.total_all_created += 1
+        output_folder = self.output_dir
         if save:
             ## save original png to comfy output dir
-            full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path("NAI_autosave", self.output_dir)
-            file = f"{filename}_{counter:05}_.png"
-            d = Path(full_output_folder)
+            full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path("NAI_autosave", output_folder)
+            # if count is more than 99999, use more digits
+            if counter > 99999:
+                file = f"{filename}_{counter}_.png"
+            else:
+                file = f"{filename}_{counter:05}_.png"
+            if subfolder_path:
+                d = Path(full_output_folder) / subfolder_path
+            else:
+                d = Path(full_output_folder)
             d.mkdir(exist_ok=True)
             (d / file).write_bytes(image_bytes)
         biased_random = BiasedRandom(max(delay_min, 2.0), max(delay_max, 2.0), 0.02, 0.8).generate()
