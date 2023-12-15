@@ -275,7 +275,6 @@ class GenerateNAID:
         self.logged_username = None
         self.logged_password = None
         self.access_token_fixed = None
-        self.handle_login()
         self.output_dir = folder_paths.get_output_directory()
         self.run_started = None
         self.initial_run_started= None
