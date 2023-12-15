@@ -275,6 +275,7 @@ class GenerateNAID:
         self.logged_username = None
         self.logged_password = None
         self.access_token_fixed = None
+        self.access_token = None
         self.output_dir = folder_paths.get_output_directory()
         self.run_started = None
         self.initial_run_started= None
@@ -406,6 +407,7 @@ class GenerateNAID:
             self.password = password
         if nai_token:
             self.access_token_fixed = nai_token # override access token
+            self.access_token = nai_token
         if self.run_started is None:
             self.run_started = datetime.now()
             self.initial_run_started = datetime.now()
