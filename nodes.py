@@ -9,7 +9,7 @@ from hashlib import blake2b
 import argon2
 
 import requests
-import json
+import uuid
 import time
 
 from os import environ as env
@@ -42,8 +42,24 @@ def get_access_key(email: str, password: str) -> str:
 
 BASE_URL="https://api.novelai.net"
 def login(key) -> str:
-    response = requests.post(f"{BASE_URL}/user/login", json={ "key": key })
-    response.raise_for_status()
+    while True:
+        try:
+            response = requests.post(f"{BASE_URL}/user/login", json={ "key": key })
+            response.raise_for_status()
+            break
+        # handle 429 Too Many Requests, Authentication Error
+        except Exception as e:
+            if isinstance(e, requests.exceptions.HTTPError):
+                errors.log_and_print(f"HTTPError: {e.response.status_code}")
+            elif isinstance(e, requests.exceptions.SSLError):
+                errors.log_and_print(f"SSLError: {e}")
+            elif isinstance(e, requests.exceptions.ConnectionError):
+                errors.log_and_print(f"ConnectionError: {e}")
+            else:
+                errors.log_and_print(f"Error: {e}")
+            print(f"retrying after 10-60 seconds, relogin...")
+            time.sleep(random.randint(10, 60)) # sleep for 120-240 seconds
+            continue
     return response.json()["accessToken"]
 
 def generate_image(access_token, prompt, model, action, parameters:dict, timeout=120.0):
@@ -301,6 +317,7 @@ class GenerateNAID:
             access_key = get_access_key(username, password)
         elif "NAI_ACCESS_TOKEN" in env:
             access_token = env["NAI_ACCESS_TOKEN"]
+            self.access_token_fixed = access_token
             self.access_token = access_token
             return access_token
         else:
@@ -411,7 +428,21 @@ class GenerateNAID:
             self.access_token_fixed = nai_token # override access token
             self.access_token = nai_token
         else:
-            self.handle_login()
+            while True:
+                try:
+                    self.handle_login()
+                    break
+                except Exception as e:
+                    if isinstance(e, requests.exceptions.HTTPError):
+                        errors.log_and_print(f"HTTPError: {e.response.status_code}")
+                    elif isinstance(e, requests.exceptions.SSLError):
+                        errors.log_and_print(f"SSLError: {e}")
+                    elif isinstance(e, requests.exceptions.ConnectionError):
+                        errors.log_and_print(f"ConnectionError: {e}")
+                    else:
+                        errors.log_and_print(f"Error: {e}")
+                    print(f"retrying after 120-240 seconds, relogin...")
+                    time.sleep(random.randint(5, 10))
         if self.run_started is None:
             self.run_started = datetime.now()
             self.initial_run_started = datetime.now()
@@ -489,7 +520,7 @@ class GenerateNAID:
         if action == "infill" and model != "nai-diffusion-2":
             model = f"{model}-inpainting"
 
-        retry_max = 5
+        retry_max = 1000 # never give up
         retry_count = 0
         zipped_bytes = None
         while retry_count < retry_max:
@@ -508,16 +539,21 @@ class GenerateNAID:
                 else:
                     errors.log_and_print(f"Error: {e}")
                 # check 500 Internal Server Error, 500 then sleep 5 seconds else sleep 60 seconds (or more)
-                if isinstance(e, requests.exceptions.HTTPError) and e.response.status_code == 500:
+                if isinstance(e, requests.exceptions.HTTPError) and e.response.status_code == 500 or isinstance(e, requests.exceptions.ConnectionError):
                     print(f"retrying {retry_count} after 5 seconds...")
-                    time.sleep(5)
+                    retry_count += 1
+                    if retry_count > 2:
+                        # wait for 60 seconds
+                        print(f"retrying {retry_count} after 25 seconds since retry count is more than 2...")
+                        time.sleep(20) # sleep for 60 seconds
+                    time.sleep(5) 
                 else:
+                    retry_count += 1
                     if not isinstance(e, requests.exceptions.Timeout):
                         # wait for 60 seconds
                         print(f"Error: {e}")
                         print(f"retrying {retry_count} after 60 seconds...")
                         time.sleep(60) # sleep for 60 seconds
-                    retry_count += 1
                     print(f"Error: {e}")
                     print(f"retrying {retry_count} after 60 seconds...")
                     time.sleep(60) # sleep for 60 seconds
@@ -557,7 +593,8 @@ class GenerateNAID:
         output_folder = os.path.join(self.output_dir, subfolder_path) 
         if save:
             ## save original png to comfy output dir
-            full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path("NAI_autosave", output_folder)
+            short_uuid = str(uuid.uuid4())[:8] # such as 12345678
+            full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(f"NAI_autosave_{short_uuid}", output_folder)
             # if count is more than 99999, use more digits
             if counter > 99999:
                 file = f"{filename}_{counter}_.png"
