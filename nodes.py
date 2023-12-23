@@ -9,7 +9,6 @@ from hashlib import blake2b
 import argon2
 
 import requests
-import uuid
 import time
 
 from os import environ as env
@@ -357,6 +356,7 @@ class GenerateNAID:
                             "save" : (["True", "False"], {"default": "False"}), # save image to comfy output dir
                             "nai_token" : ("STRING", { "default": "", "multiline": False, "dynamicPrompts": False }), # override access token
                             "subfolder_path" : ("STRING", { "default": "", "multiline": False, "dynamicPrompts": False }), # override subfolder path for comfy output dir
+                            "save_format" : (["png", "webp"], {"default": "webp"}), # save image to comfy output dir
                          },
         }
 
@@ -415,7 +415,7 @@ class GenerateNAID:
 
     def generate(self, size, width, height, positive, negative, steps, cfg, smea, sampler, scheduler, seed, uncond_scale,
                  cfg_rescale, delay_max, fallback_black, delay_min, option=None, username=None, password=None,runtime_limit_min=0, runtime_limit_max=0, sleep_min=0, sleep_max=0, save=False,
-                 nai_token=None, subfolder_path=None):
+                 nai_token=None, subfolder_path=None, save_format="webp"):
         save = save == "True"
         # ref. novelai_api.ImagePreset
         # We override the default values here for non-custom sizes
@@ -592,17 +592,26 @@ class GenerateNAID:
         self.total_all_created += 1
         output_folder = os.path.join(self.output_dir, subfolder_path) 
         if save:
-            ## save original png to comfy output dir
-            short_uuid = str(uuid.uuid4())[:8] # such as 12345678
-            full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(f"NAI_autosave_{short_uuid}", output_folder)
+            ## save original png/webp to comfy output dir
+            ## timestamp with 8 characters
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")[2:]
+            full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(f"NAI_{timestamp}", output_folder)
             # if count is more than 99999, use more digits
             if counter > 99999:
-                file = f"{filename}_{counter}_.png"
+                file = f"{filename}_{counter}_.{save_format}"
             else:
-                file = f"{filename}_{counter:05}_.png"
+                file = f"{filename}_{counter:05}_.{save_format}"
             d = Path(full_output_folder)
             d.mkdir(exist_ok=True)
             (d / file).write_bytes(image_bytes)
+            # optimize
+            if save_format == "webp":
+                actual_filepath = d / file
+                filesize_before = os.path.getsize(actual_filepath)
+                image_load = Image.open(actual_filepath)
+                image_load.save(actual_filepath, optimize=True)
+                filesize_compress = os.path.getsize(actual_filepath)
+                print(f"Saved image to {actual_filepath}, filesize before {filesize_before}, filesize after {filesize_compress}")
         biased_random = BiasedRandom(max(delay_min, 2.0), max(delay_max, 2.0), 0.02, 0.8).generate()
         print(f"sleeping for {biased_random} seconds")
         time.sleep(biased_random) # sleep for 2 seconds minimum

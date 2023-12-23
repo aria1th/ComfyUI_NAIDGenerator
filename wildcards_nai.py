@@ -120,13 +120,27 @@ class wildcards:
         """
         # select first
         if isinstance(groups, list):
-            chosen = random.choice(groups)
+            # if $d is in the chosen string, modify pool
+            pool = []
+            regex = re.compile(r"(.*)\$(\d+)$")
+            if any(regex.match(x) for x in groups):
+                for group in groups:
+                    m = regex.match(group)
+                    if m:
+                        #print(f"m : {m.groups()}")
+                        pool += [m.group(1)] * int(m.group(2))
+                        weighted = True
+                    else:
+                        pool.append(group)
+            else:
+                pool = groups
+            chosen = random.choice(pool)
         else:
             chosen = groups
         # if __card__ is in the chosen string, recursively process it
         cards = wildcards.card_loop(chosen)
         return cards
-    
+
     def recursive_process(text:str) -> str:
         """
         Recursively processes the text
@@ -267,6 +281,11 @@ class wildcards:
         
     # 카드 파일 읽기
     def card_load():
+        """
+        Loads card.txt
+        empty lines will be ignored
+        for each line, axedgb.... $4 at the end will mean it should be repeated 4 times
+        """
         #cards=wildcards.cards
         card_path=wildcards.card_path
         cards = {}
@@ -295,6 +314,13 @@ class wildcards:
                 lines = f.readlines()
                 for line in lines:
                     line=line.strip()
+                    optional_count = 1
+                    # check if $ is in the line at the end with optional count
+                    re_optional = re.compile(r"(.*)\$(\d+)$")
+                    m = re_optional.match(line)
+                    if m:
+                        line = m.group(1)
+                        optional_count = int(m.group(2))
                     # 주석 빈줄 제외
                     if line.startswith("#") or len(line)==0:
                         continue
@@ -303,8 +329,9 @@ class wildcards:
                     # check if __file_name__ is in the line, recursive error
                     if "__" + file_nameAll + "__" in line:
                         raise ValueError(f"Recursive __{file_nameAll}__ in {file_nameAll}: {line}")
-                    cards[file_nameAll]+=[line]
-                    cards[file_name]+=[line]
+                    for i in range(optional_count):
+                        cards[file_nameAll]+=[line]
+                        cards[file_name]+=[line]
                     #print(f"line : {line}")
             print(f"card file : {file_nameAll} ; {len(cards[file_nameAll])}")
         wildcards.cards=cards
