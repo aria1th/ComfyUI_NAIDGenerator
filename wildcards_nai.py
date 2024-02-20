@@ -353,7 +353,7 @@ class wildcards:
         # if __{}__ is still in text, raise error
         if "__" in result:
             print(f"result : {result}")
-            raise ValueError("Failed to find card")
+            raise ValueError(f"Failed to find card in {result}")
         # split by ',', remove empty string/ whitespaces, and join with ', ' again
         result = ", ".join([x for x in result.split(",") if not x.isspace() and len(x) > 0])
         print(f"result : {result}")

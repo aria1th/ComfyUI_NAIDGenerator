@@ -39,11 +39,11 @@ def get_access_key(email: str, password: str) -> str:
     return argon_hash(email, password, 64, "novelai_data_access_key")[:64]
 
 
-BASE_URL="https://api.novelai.net"
+BASE_URL="https://image.novelai.net"
 def login(key) -> str:
     while True:
         try:
-            response = requests.post(f"{BASE_URL}/user/login", json={ "key": key })
+            response = requests.post("https://api.novelai.net/user/login", json={ "key": key })
             response.raise_for_status()
             break
         # handle 429 Too Many Requests, Authentication Error
@@ -171,7 +171,8 @@ class BiasedRandom:
     Generates a random number with bias
     Bigger numbers have smaller chance of being generated
     """
-    def __init__(self, min_val, max_val, bias = 0.02, chance=0.8):
+    def __init__(self, min_val, max_val, bias = 0.02, chance=0.8, seed=None):
+        self.random = random.Random(seed)
         self.min = min_val
         self.max = max_val
         self.bias = bias
@@ -183,11 +184,11 @@ class BiasedRandom:
         if max_val is None:
             max_val = self.max
         # roll a dice to select area
-        if random.random() < self.chance or depth >= self.max_depth:
+        if self.random.random() < self.chance or depth >= self.max_depth:
             # small area
             min_val = min_val
             max_val = min_val + (max_val - min_val) * self.bias
-            return random.randint(int(min_val), int(max_val))
+            return self.random.randint(int(min_val), int(max_val))
         else:
             # recusive call
             new_min = min_val + (max_val - min_val) * self.bias
@@ -233,7 +234,7 @@ class NAISmeaRandom:
             "SMEA" : ["none", "SMEA"],
             "SMEA+DYN" : ["none", "SMEA", "SMEA+DYN"],
         }
-    def generate(self, pools="SMEA+DYN", seed=0):
+    def generate(self, pools="SMEA+DYN", seed=None):
         instance = random.Random(seed)
         choice = instance.choice(self.options[pools])
         print(f"Selected {choice} from {self.options[pools]}")
@@ -258,7 +259,7 @@ class UniformRandomFloat:
     """
     def __init__(self):
         pass
-    def generate(self, min_val, max_val, decimal_places, seed=0):
+    def generate(self, min_val, max_val, decimal_places, seed=None):
         if min_val > max_val:
             return min_val
         instance = random.Random(seed)
@@ -329,9 +330,9 @@ class GenerateNAID:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "size": (["Portrait", "Landscape", "Square", "Random", "Custom(Paid)", "Large Portrait(Paid)", "Large Landscape(Paid)"], { "default": "Portrait" }),
-                "width": ("INT", { "default": 832, "min": 64, "max": 1600, "step": 64, "display": "number" }),
-                "height": ("INT", { "default": 1216, "min": 64, "max": 1600, "step": 64, "display": "number" }),
+                "size": (["Portrait", "Landscape", "Square", "Random", "Custom(Paid)", "Large Portrait(Paid)", "Large Landscape(Paid)", "Wallpaper Portrait(Paid)", "Wallpaper Landscape(Paid)"], { "default": "Portrait" }),
+                "width": ("INT", { "default": 832, "min": 64, "max": 2400, "step": 64, "display": "number" }),
+                "height": ("INT", { "default": 1216, "min": 64, "max": 2400, "step": 64, "display": "number" }),
                 "positive": ("STRING", { "default": "{}, best quality, amazing quality, very aesthetic, absurdres", "multiline": True, "dynamicPrompts": False }),
                 "negative": ("STRING", { "default": "lowres", "multiline": True, "dynamicPrompts": False }),
                 "steps": ("INT", { "default": 28, "min": 0, "max": 50, "step": 1, "display": "number" }),
@@ -364,7 +365,7 @@ class GenerateNAID:
     FUNCTION = "generate"
     CATEGORY = "NovelAI"
     
-    def sanitize_options(self, size, width, height, steps, option, positive, negative):
+    def sanitize_options(self, size, width, height, steps, option, positive, negative, seed=None):
         """
         Validates the free options
         """
@@ -376,6 +377,12 @@ class GenerateNAID:
             elif "Large Landscape" in size:
                 width = 1536
                 height = 1024
+            elif "Wallpaper Portrait" in size:
+                width = 1088
+                height = 1920
+            elif "Wallpaper Landscape" in size:
+                width = 1920
+                height = 1088
             return size, width, height, steps, option, positive, negative
         # if width or height is not default, warn and reset to default
         # truncate positive -> 225, negative -> 225
@@ -388,7 +395,7 @@ class GenerateNAID:
             print(f"Overriding negative prompt to {negative_pruned}")
             negative = negative_pruned
         if size == 'Random':
-            size = random.choice(["Portrait", "Landscape", "Square"])
+            size = random.Random(seed).choice(["Portrait", "Landscape", "Square"])
         if size == "Portrait":
             if width != 832 or height != 1216:
                 print("Overriding width and height to default values for Portrait")
@@ -419,8 +426,10 @@ class GenerateNAID:
         save = save == "True"
         # ref. novelai_api.ImagePreset
         # We override the default values here for non-custom sizes
-        size, width, height, steps, option, positive, negative = self.sanitize_options(size, width, height, steps, option, positive, negative)
+        is_paid = "Paid" in size
+        size, width, height, steps, option, positive, negative = self.sanitize_options(size, width, height, steps, option, positive, negative, seed)
         assert cfg > 0, "cfg must be greater than 0"
+        random_instance = random.Random(seed)
         if username and password:
             self.username = username
             self.password = password
@@ -442,7 +451,7 @@ class GenerateNAID:
                     else:
                         errors.log_and_print(f"Error: {e}")
                     print(f"retrying after 120-240 seconds, relogin...")
-                    time.sleep(random.randint(5, 10))
+                    time.sleep(random_instance.randint(5, 10))
         if self.run_started is None:
             self.run_started = datetime.now()
             self.initial_run_started = datetime.now()
@@ -450,17 +459,17 @@ class GenerateNAID:
             runtime = (datetime.now() - self.run_started).total_seconds()
             if runtime_limit_max <= runtime_limit_min:
                 runtime_limit_max = runtime_limit_min + 1
-            runtime_limit = random.randint(runtime_limit_min, runtime_limit_max)
+            runtime_limit = random_instance.randint(runtime_limit_min, runtime_limit_max)
             if sleep_min == 0 and sleep_max == 0:
                 sleep_time = 0
             elif sleep_min > 0 and sleep_max > 0:
                 s_min, s_max = min(sleep_min, sleep_max), max(sleep_min, sleep_max)
-                sleep_time = random.randint(s_min, s_max)
+                sleep_time = random_instance.randint(s_min, s_max)
             else:
                 raise RuntimeError("Invalid sleep_min and sleep_max")
             if sleep_time == 0 and runtime > runtime_limit:
                 raise RuntimeError("Runtime limit exceeded, won't sleep but raised exception")
-            elif sleep_time > 0 and runtime > runtime_limit:
+            elif sleep_time > 0 and runtime > runtime_limit and not is_paid:
                 print(f"Runtime limit exceeded, sleeping for {sleep_time} seconds")
                 restart_at = datetime.now() + timedelta(seconds=sleep_time)
                 print(f"Restarts at {restart_at}")
@@ -520,7 +529,7 @@ class GenerateNAID:
         if action == "infill" and model != "nai-diffusion-2":
             model = f"{model}-inpainting"
 
-        retry_max = 1000 # never give up
+        retry_max = 10000 # never give up
         retry_count = 0
         zipped_bytes = None
         while retry_count < retry_max:
@@ -546,6 +555,10 @@ class GenerateNAID:
                         # wait for 60 seconds
                         print(f"retrying {retry_count} after 25 seconds since retry count is more than 2...")
                         time.sleep(20) # sleep for 60 seconds
+                        if retry_count > 5:
+                            # wait for 60 seconds
+                            print(f"retrying {retry_count} after 60 seconds since retry count is more than 5...")
+                            time.sleep(60) # sleep for 60 seconds
                     time.sleep(5) 
                 else:
                     retry_count += 1
@@ -557,6 +570,10 @@ class GenerateNAID:
                     print(f"Error: {e}")
                     print(f"retrying {retry_count} after 60 seconds...")
                     time.sleep(60) # sleep for 60 seconds
+                    if retry_count > 5:
+                        # wait for 60 seconds
+                        print(f"retrying {retry_count} after 60 seconds since retry count is more than 5...")
+                        time.sleep(60)
                 while True:
                     try:
                         self.handle_login() # refresh access token
@@ -571,7 +588,7 @@ class GenerateNAID:
                         else:
                             errors.log_and_print(f"Error: {e}")
                         print(f"retrying {retry_count} after 120-240 seconds, relogin...")
-                        time.sleep(random.randint(120, 240)) # sleep for 120-240 seconds
+                        time.sleep(random_instance.randint(120, 240)) # sleep for 120-240 seconds
         if zipped_bytes is None and not fallback_black:
             raise RuntimeError("Failed to generate image, possibly due to timeout")
         
@@ -612,10 +629,10 @@ class GenerateNAID:
                 image_load.save(actual_filepath, optimize=True)
                 filesize_compress = os.path.getsize(actual_filepath)
                 print(f"Saved image to {actual_filepath}, filesize before {filesize_before}, filesize after {filesize_compress}")
-        biased_random = BiasedRandom(max(delay_min, 2.0), max(delay_max, 2.0), 0.02, 0.8).generate()
-        print(f"sleeping for {biased_random} seconds")
-        time.sleep(biased_random) # sleep for 2 seconds minimum
-
+        if not is_paid:
+            biased_random = BiasedRandom(max(delay_min, 2.0), max(delay_max, 2.0), 0.02, 0.8,seed=seed).generate()
+            print(f"sleeping for {biased_random} seconds")
+            time.sleep(biased_random) # sleep for 2 seconds minimum
         return (image,)
 
 
