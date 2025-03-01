@@ -113,7 +113,7 @@ class ModelOption:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model": (["safe-diffusion", "nai-diffusion", "nai-diffusion-furry", "nai-diffusion-2", "nai-diffusion-3"], { "default": "nai-diffusion-3" }),
+                "model": (["safe-diffusion", "nai-diffusion", "nai-diffusion-furry", "nai-diffusion-2", "nai-diffusion-3", "nai-diffusion-4-curated-preview", "nai-diffusion-4-full"], { "default": "nai-diffusion-4-full" }),
             },
             "optional": { "option": ("NAID_OPTION",) },
         }
