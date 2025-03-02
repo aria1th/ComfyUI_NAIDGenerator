@@ -240,6 +240,7 @@ class Wildcards:
                 custom_separator = possible_custom_sep
 
             raw_options_str = match.group(9)
+            #logging.info(f"sub() expansion: {raw_options_str}")
             options = raw_options_str.split("|") if raw_options_str else []
             count_str = match.group(4)  # single numeric?
             n1 = match.group(5)        # first in range
@@ -254,7 +255,7 @@ class Wildcards:
                 n = int(count_str)
                 n = min(n, c)  # clamp
                 return custom_separator.join(random.sample(options, n))
-
+            rng_count = 1
             # If we have a range 'n1-n2'
             if n1 or n2:
                 lower = int(n1) if n1 else 0
@@ -265,9 +266,9 @@ class Wildcards:
                     lower, upper = upper, lower
                 rng_count = random.randint(lower, upper)
                 return custom_separator.join(random.sample(options, rng_count))
-
+            logging.info(f"Options: {options}, sampling count: {rng_count}")
             # Otherwise, random sample from 0..c
-            rng_count = random.randint(0, c)
+
             return custom_separator.join(random.sample(options, rng_count))
 
         except Exception as e:
@@ -413,7 +414,8 @@ class Wildcards:
 
         if not Wildcards.is_card_load or load:
             Wildcards.card_load()
-
+        prefix_with_comma = "," if text.startswith(",") else ""
+        suffix_with_comma = "," if text.endswith(",") else ""
         expanded = Wildcards.recursive_process(text)
         # If any leftover double-underscores remain, it's presumably an unrecognized card reference
         if "__" in expanded:
@@ -425,7 +427,7 @@ class Wildcards:
         # Clean up repeated commas or spaces if needed:
         # (Original code did a quick join by comma to remove empties.)
         joined = ", ".join(x for x in final.split(",") if x.strip())
-
+        joined = prefix_with_comma + joined + suffix_with_comma # restore commas if needed
         logging.info(f"Final expanded text: {joined}")
         return joined
 
